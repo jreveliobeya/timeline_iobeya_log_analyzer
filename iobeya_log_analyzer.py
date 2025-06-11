@@ -133,39 +133,37 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
         toolbar.addSeparator()
 
         # Log Level Filter Buttons
-        btn_style = "QPushButton {{ background-color: {bg}; color: {fg}; border: 1px solid {border_color}; padding: 3px 7px; border-radius: 4px; font-weight: bold; font-size: 10px; }} QPushButton:hover {{ background-color: {bg_hover}; }} QPushButton:checked {{ background-color: {bg_checked}; border: 1px solid {fg}; }}"
-        
-        self.error_btn = QtWidgets.QPushButton("ERR") # Shorter text for compactness
-        self.error_btn.setToolTip("Filter by ERROR level")
-        self.error_btn.setCheckable(True)
-        self.error_btn.setChecked(self.app_logic.selected_log_levels.get('ERROR', True))
-        self.error_btn.setStyleSheet(btn_style.format(bg='#FFEBEE', fg='#D32F2F', border_color='#FFCDD2', bg_hover='#FFCDD2', bg_checked='#F44336'))
-        self.error_btn.clicked.connect(lambda checked: self.app_logic.toggle_log_level_filter('ERROR', checked))
-        toolbar.addWidget(self.error_btn)
+        level_button_styles = {
+            "ERROR": {"text": "ERR", "tooltip": "Filter by ERROR level", "bg": "#D9534F", "checked_bg": "#C9302C", "hover": "#B94A48"},
+            "WARN":  {"text": "WRN", "tooltip": "Filter by WARN level",  "bg": "#F0AD4E", "checked_bg": "#EC971F", "hover": "#D68F3E"},
+            "INFO":  {"text": "INF", "tooltip": "Filter by INFO level",  "bg": "#5BC0DE", "checked_bg": "#31B0D5", "hover": "#2CA8C6"},
+            "DEBUG": {"text": "DBG", "tooltip": "Filter by DEBUG level", "bg": "#777777", "checked_bg": "#5E5E5E", "hover": "#4F4F4F"}
+        }
 
-        self.warn_btn = QtWidgets.QPushButton("WRN") # Shorter text
-        self.warn_btn.setToolTip("Filter by WARN level")
-        self.warn_btn.setCheckable(True)
-        self.warn_btn.setChecked(self.app_logic.selected_log_levels.get('WARN', True))
-        self.warn_btn.setStyleSheet(btn_style.format(bg='#FFF3E0', fg='#F57C00', border_color='#FFE0B2', bg_hover='#FFE0B2', bg_checked='#FF9800'))
-        self.warn_btn.clicked.connect(lambda checked: self.app_logic.toggle_log_level_filter('WARN', checked))
-        toolbar.addWidget(self.warn_btn)
+        common_button_style_parts = "color: white; border: 1px solid #333; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 10pt;"
 
-        self.info_btn = QtWidgets.QPushButton("INF") # Shorter text
-        self.info_btn.setToolTip("Filter by INFO level")
-        self.info_btn.setCheckable(True)
-        self.info_btn.setChecked(self.app_logic.selected_log_levels.get('INFO', True))
-        self.info_btn.setStyleSheet(btn_style.format(bg='#E3F2FD', fg='#1976D2', border_color='#BBDEFB', bg_hover='#BBDEFB', bg_checked='#2196F3'))
-        self.info_btn.clicked.connect(lambda checked: self.app_logic.toggle_log_level_filter('INFO', checked))
-        toolbar.addWidget(self.info_btn)
-
-        self.debug_btn = QtWidgets.QPushButton("DBG") # Shorter text
-        self.debug_btn.setToolTip("Filter by DEBUG level")
-        self.debug_btn.setCheckable(True)
-        self.debug_btn.setChecked(self.app_logic.selected_log_levels.get('DEBUG', True))
-        self.debug_btn.setStyleSheet(btn_style.format(bg='#F3E5F5', fg='#7B1FA2', border_color='#E1BEE7', bg_hover='#E1BEE7', bg_checked='#9C27B0'))
-        self.debug_btn.clicked.connect(lambda checked: self.app_logic.toggle_log_level_filter('DEBUG', checked))
-        toolbar.addWidget(self.debug_btn)
+        for level_name, styles in level_button_styles.items():
+            btn = QtWidgets.QPushButton(styles["text"])
+            btn.setToolTip(styles["tooltip"])
+            btn.setCheckable(True)
+            btn.setChecked(self.app_logic.selected_log_levels.get(level_name, True))
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {styles['bg']};
+                    {common_button_style_parts}
+                }}
+                QPushButton:checked {{
+                    background-color: {styles['checked_bg']};
+                    border: 1px solid black; /* Darker border when checked */
+                }}
+                QPushButton:hover:!checked {{
+                    background-color: {styles['hover']};
+                }}
+            """)
+            btn.clicked.connect(lambda checked, name=level_name: self.app_logic.toggle_log_level_filter(name, checked))
+            toolbar.addWidget(btn)
+            # Store button as instance attribute
+            setattr(self, f"{level_name.lower()}_btn", btn)
         
         toolbar.addSeparator()
 
@@ -581,35 +579,40 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
     def update_log_summary(self):
         if self.log_entries_full.empty:
             self.period_label.setText("No log loaded");
+            self.period_label.setToolTip("No log file has been loaded.");
             self.total_label.setText("0 entries")
             self.error_btn.setText("ERROR: 0");
             self.warn_btn.setText("WARN: 0")
             self.info_btn.setText("INFO: 0");
             self.debug_btn.setText("DEBUG: 0")
-            return
-
-        level_counts = self.log_entries_full['log_level'].value_counts().to_dict()
-        for level in ['ERROR', 'WARN', 'INFO', 'DEBUG']:
-            count = level_counts.get(level, 0)
-            self.log_level_buttons[level].setText(f"{level} ({count})")
-            self.log_level_buttons[level].setChecked(self.selected_log_levels[level])
-
-        start_time = self.log_entries_full['datetime_obj'].min()
-        end_time = self.log_entries_full['datetime_obj'].max()
-        # Ensure datetime objects are actual datetimes before formatting
-        if pd.notna(start_time) and pd.notna(end_time) and \
-           isinstance(start_time, datetime) and isinstance(end_time, datetime) and \
-           start_time != datetime.min and end_time != datetime.min:
-            self.period_label.setText(
-                f"{start_time.strftime('%y-%m-%d %H:%M')}→{end_time.strftime('%y-%m-%d %H:%M')}")
-        elif not self.log_entries_full.empty and 'datetime' in self.log_entries_full.columns:
-             self.period_label.setText(
-                 f"{self.log_entries_full['datetime'].min()} → {self.log_entries_full['datetime'].max()}")
         else:
-            self.period_label.setText("N/A → N/A")
+            level_counts = self.log_entries_full['log_level'].value_counts().to_dict()
+            for level in ['ERROR', 'WARN', 'INFO', 'DEBUG']:
+                count = level_counts.get(level, 0)
+                self.log_level_buttons[level].setText(f"{level} ({count})")
+                self.log_level_buttons[level].setChecked(self.selected_log_levels[level])
 
-        total_entries = len(self.log_entries_full);
-        self.total_label.setText(f"{total_entries:,} entries")
+            start_time = self.log_entries_full['datetime_obj'].min()
+            end_time = self.log_entries_full['datetime_obj'].max()
+            # Ensure datetime objects are actual datetimes before formatting
+            if pd.notna(start_time) and pd.notna(end_time) and \
+               isinstance(start_time, datetime) and isinstance(end_time, datetime) and \
+               start_time != datetime.min and end_time != datetime.min:
+                self.period_label.setText(
+                f"{start_time.strftime('%y-%m-%d %H:%M')}→{end_time.strftime('%y-%m-%d %H:%M')}")
+                self.period_label.setToolTip(f"Start: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\nEnd:   {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            elif not self.log_entries_full.empty and 'datetime' in self.log_entries_full.columns:
+                 # This branch might be hit if datetime_obj parsing failed or was partial
+                 min_dt_str = str(self.log_entries_full['datetime'].min())
+                 max_dt_str = str(self.log_entries_full['datetime'].max())
+                 self.period_label.setText(f"{min_dt_str} → {max_dt_str}")
+                 self.period_label.setToolTip(f"Start: {min_dt_str}\nEnd:   {max_dt_str} (raw string)")
+            else:
+                self.period_label.setText("N/A → N/A")
+                self.period_label.setToolTip("Date range not available")
+
+            total_entries = len(self.log_entries_full);
+            self.total_label.setText(f"{total_entries:,} entries")
 
     def _rebuild_message_types_data_and_list(self, select_all_visible=False):
         if self.log_entries_full.empty: return

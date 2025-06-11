@@ -128,7 +128,9 @@ class AppLogic(QtCore.QObject):
             self.mw.statusBar().showMessage("Vue et filtres réinitialisés", 3000)
 
     def update_log_summary_display(self):
-        if not self.mw.period_label or not self.mw.total_label or not self.mw.error_btn:
+        if not (hasattr(self.mw, 'period_label') and self.mw.period_label and 
+             hasattr(self.mw, 'total_label') and self.mw.total_label and 
+             hasattr(self.mw, 'error_btn') and self.mw.error_btn):
             return
 
         if self.mw.log_entries_full.empty:

@@ -38,13 +38,29 @@ class StatsDialog(QtWidgets.QDialog):
         tab_widget.addTab(pareto_tab, "Message Type Pareto");
         self.plot_pareto_chart()
 
-        # Level Distribution Tab
-        level_dist_tab = QtWidgets.QWidget();
-        level_dist_layout = QtWidgets.QVBoxLayout(level_dist_tab)
-        self.level_dist_canvas = FigureCanvas(Figure(figsize=(5, 4)));
-        level_dist_layout.addWidget(self.level_dist_canvas)
-        tab_widget.addTab(level_dist_tab, "Log Level Distribution");
-        self.plot_level_distribution()
+        # Distribution Chart Tab (replaces Level Distribution)
+        dist_chart_tab = QtWidgets.QWidget();
+        dist_chart_layout = QtWidgets.QVBoxLayout(dist_chart_tab)
+
+        # Radio buttons for chart type selection
+        self.chart_type_groupbox = QtWidgets.QGroupBox("Chart Data Type")
+        chart_type_layout = QtWidgets.QHBoxLayout()
+        self.radio_level = QtWidgets.QRadioButton("By Log Level")
+        self.radio_message_type = QtWidgets.QRadioButton("By Message Type")
+        self.radio_level.setChecked(True) # Default
+        chart_type_layout.addWidget(self.radio_level)
+        chart_type_layout.addWidget(self.radio_message_type)
+        self.chart_type_groupbox.setLayout(chart_type_layout)
+        dist_chart_layout.addWidget(self.chart_type_groupbox)
+
+        self.dist_canvas = FigureCanvas(Figure(figsize=(5, 4))); # Renamed from level_dist_canvas
+        dist_chart_layout.addWidget(self.dist_canvas)
+        tab_widget.addTab(dist_chart_tab, "Distribution Chart"); # Renamed tab
+
+        self.radio_level.toggled.connect(self._update_distribution_chart_type)
+        # No need to connect radio_message_type explicitly if radio_level's toggle handles both states
+
+        self._plot_distribution_chart() # Initial plot
 
     def populate_summary_text(self):
         if self.all_log_entries.empty: 
@@ -117,29 +133,96 @@ class StatsDialog(QtWidgets.QDialog):
         fig.tight_layout(rect=[0, 0.05, 1, 0.95]);
         self.pareto_canvas.draw()
 
-    def plot_level_distribution(self):
-        if self.all_log_entries.empty: return
+    def _update_distribution_chart_type(self):
+        # This method is called when a radio button is toggled.
+        # We only need to replot if the new state is 'checked'.
+        # However, the toggled signal fires for both check and uncheck.
+        # We can simplify by just replotting, or check which button is now active.
+        self._plot_distribution_chart()
+
+    def _plot_distribution_chart(self): # Renamed from plot_level_distribution
+        if self.all_log_entries.empty: 
+            fig = self.dist_canvas.figure
+            fig.clear()
+            ax = fig.add_subplot(111)
+            ax.text(0.5, 0.5, "No log entries loaded.", ha='center', va='center')
+            fig.suptitle("Distribution Chart", fontsize=12)
+            self.dist_canvas.draw()
+            return
         
-        level_counts = self.all_log_entries['log_level'].value_counts()
-        if level_counts.empty: return
-
-        ordered_labels = ['ERROR', 'WARN', 'INFO', 'DEBUG']
-        # Filter and order the counts based on ordered_labels
-        plot_data = level_counts[level_counts.index.isin(ordered_labels)].reindex(ordered_labels).dropna()
-
-        labels = plot_data.index.tolist()
-        sizes = plot_data.values.tolist()
-
-        fig = self.level_dist_canvas.figure;
-        fig.clear();
+        fig = self.dist_canvas.figure
+        fig.clear()
         ax = fig.add_subplot(111)
-        # Define colors for standard levels
-        colors_map = {'ERROR': '#D32F2F', 'WARN': '#F57C00', 'INFO': '#1976D2', 'DEBUG': '#7B1FA2', 'OTHER': '#AAAAAA'}
-        pie_colors = [colors_map.get(label, '#AAAAAA') for label in labels]  # Fallback for non-standard
+        
+        chart_title = "Distribution Chart"
+        labels = []
+        sizes = []
+        pie_colors = None # Let Matplotlib decide for message types, specify for levels
 
-        ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=pie_colors,
-               wedgeprops={'edgecolor': 'white'})  # Add edge color for separation
-        ax.axis('equal');
-        fig.suptitle("Log Level Distribution", fontsize=12);
-        fig.tight_layout();
-        self.level_dist_canvas.draw()
+        if self.radio_level.isChecked():
+            chart_title = "Log Level Distribution"
+            level_counts = self.all_log_entries['log_level'].value_counts()
+            if not level_counts.empty:
+                ordered_labels = ['ERROR', 'WARN', 'INFO', 'DEBUG']
+                # Filter and order the counts based on ordered_labels, include 0 for levels not present
+                plot_data = level_counts.reindex(ordered_labels, fill_value=0)
+                # Remove levels with 0 count for cleaner pie chart
+                plot_data = plot_data[plot_data > 0]
+
+                if not plot_data.empty:
+                    labels = plot_data.index.tolist()
+                    sizes = plot_data.values.tolist()
+                    colors_map = {'ERROR': '#D32F2F', 'WARN': '#F57C00', 'INFO': '#1976D2', 'DEBUG': '#7B1FA2'}
+                    pie_colors = [colors_map.get(label, '#AAAAAA') for label in labels]
+
+        elif self.radio_message_type.isChecked():
+            chart_title = "Message Type Distribution"
+            logger_counts = self.all_log_entries['logger_name'].value_counts()
+            if not logger_counts.empty:
+                total_logs = len(self.all_log_entries) # Use total from all_log_entries for percentage calculation
+                threshold_percentage = 2.0  # Group types constituting less than this percentage
+
+                df_counts = logger_counts.reset_index()
+                df_counts.columns = ['logger', 'count']
+                df_counts['percentage'] = (df_counts['count'] / total_logs) * 100
+                
+                main_types = df_counts[df_counts['percentage'] >= threshold_percentage]
+                other_types = df_counts[df_counts['percentage'] < threshold_percentage]
+                
+                current_labels = main_types['logger'].tolist()
+                current_sizes = main_types['count'].tolist()
+                
+                if not other_types.empty:
+                    others_sum = other_types['count'].sum()
+                    if others_sum > 0: 
+                        current_labels.append(f"Others ({len(other_types)} types < {threshold_percentage}% each)")
+                        current_sizes.append(others_sum)
+                
+                labels = current_labels
+                sizes = current_sizes
+                # pie_colors will be None, Matplotlib will use default color cycle
+
+        if not labels or not sizes:
+            ax.text(0.5, 0.5, "No data to display for this selection.", ha='center', va='center', fontsize=10)
+        else:
+            # Ensure autopct doesn't display for tiny slices if sizes are not normalized (they are counts here)
+            # Or, pass normalized data to pie if you want percentages of the displayed pie, not of total logs.
+            # For now, autopct shows percentage of the current pie's total.
+            wedges, texts, autotexts = ax.pie(sizes, labels=None, autopct='%1.1f%%', startangle=90, colors=pie_colors,
+                                              wedgeprops={'edgecolor': 'white'})
+            ax.axis('equal')
+
+            # Create a legend for pie charts, especially useful for message types
+            # Filter labels and sizes for legend to avoid issues if a slice is too small for autopct
+            # legend_labels = [f'{l} ({s})' for l, s in zip(labels, sizes)]
+            # Use a more readable format for legend, especially if labels are long
+            legend_labels = []
+            for l, s in zip(labels, sizes):
+                percentage = (s / sum(sizes)) * 100 if sum(sizes) > 0 else 0
+                legend_labels.append(f'{l}: {s} ({percentage:.1f}%)')
+
+            ax.legend(wedges, legend_labels, title=chart_title, loc="center left", bbox_to_anchor=(1, 0, 0.5, 1), fontsize='small')
+            
+        fig.suptitle(chart_title, fontsize=14, y=0.98) # Adjusted y for suptitle with legend
+        fig.tight_layout(rect=[0, 0, 0.85, 0.96]) # Adjust rect to make space for legend
+        self.dist_canvas.draw()

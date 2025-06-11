@@ -163,6 +163,24 @@ class VirtualTreeWidget(QtWidgets.QTreeWidget):
                 entry['message'].split('\n')[0]  # Show only first line in tree
             ])
             item.setData(0, QtCore.Qt.UserRole, entry)  # Store full entry data
+
+        # Set text color based on log level
+            log_level = entry.get('log_level', '').upper()
+            color = None
+            if log_level == 'ERROR':
+                color = QtGui.QColor("red")
+            elif log_level == 'WARN':
+                color = QtGui.QColor("orange")
+            elif log_level == 'DEBUG':
+                color = QtGui.QColor("gray")
+            # INFO and other levels will use default color (no explicit set needed or use black)
+            # else: # Optional: Explicitly set INFO to black
+            #     color = QtGui.QColor("black")
+
+            if color:
+                for col in range(item.columnCount()):
+                    item.setForeground(col, QtGui.QBrush(color))
+
             new_q_items.append(item)
 
         if new_q_items:
