@@ -19,7 +19,8 @@ from date_selection_dialog import DateSelectionDialog
 class LogAnalyzerApp(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("iObeya Timeline Log Analyzer")
+        self.app_version = "4.1.0"
+        self.setWindowTitle(f"iObeya Timeline Log Analyzer v{self.app_version}")
         self.resize(1600, 1000)
         self.log_entries_full = pd.DataFrame() # Initialize as DataFrame
         self.message_types_data_for_list = {}
@@ -76,18 +77,18 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
         main_layout.addWidget(main_splitter)
 
         # Setup Welcome Widget as initial view
-        self.welcome_widget = WelcomeWidget(version=self.get_app_version())
+        self.welcome_widget = WelcomeWidget(version=self.app_version)
         self.welcome_widget.load_file_requested.connect(self.load_log_file)
         self.welcome_widget.load_archive_requested.connect(self.load_log_archive)
         self.setCentralWidget(self.welcome_widget)
 
     def get_app_version(self):
         # Helper to get version; consistent with main()
-        return "4.0.0" 
+        return self.app_version 
 
     def show_about_dialog(self):
         """Shows the 'About' dialog."""
-        dialog = AboutDialog(version=self.get_app_version(), parent=self)
+        dialog = AboutDialog(version=self.app_version, parent=self)
         dialog.exec_()
 
     def show_main_ui(self):
@@ -459,7 +460,7 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
             self.loading_dialog.update_status("Finalizing...", "Displaying results.")
             self.loading_dialog.accept()
         self.log_entries_full = log_entries_df
-        self.setWindowTitle(f"Timeline Log Analyzer - {self.current_loaded_source_name}")
+        self.setWindowTitle(f"iObeya Timeline Log Analyzer - {self.current_loaded_source_name}")
 
         if hasattr(self.selected_messages_list, 'set_all_items_data'):
             self.selected_messages_list.set_all_items_data([])
@@ -735,7 +736,7 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
 def main():
     app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName("iObeya Timeline Log Analyzer")
-    app.setApplicationVersion("4.0.0") # Version bump
+    app.setApplicationVersion("4.1.0") # Version bump
     app.setOrganizationName("LogAnalyzer")
     try:
         app.setStyle(QtWidgets.QStyleFactory.create('Fusion'))
