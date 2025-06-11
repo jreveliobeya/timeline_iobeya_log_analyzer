@@ -16,6 +16,7 @@ class AppLogic(QtCore.QObject):
         self.timeline_filter_active = False
         self.timeline_filter_start_time = None
         self.timeline_filter_end_time = None
+        self.filtered_df = pd.DataFrame()
         self.current_search_text = ""
         self.fts_db_conn = None
 
@@ -73,9 +74,6 @@ class AppLogic(QtCore.QObject):
                 search_input.clear()
                 search_input.blockSignals(False)
 
-            # This rebuilds the message type tree and selects all by default
-            self._rebuild_message_types_data_and_list(select_all_visible=True)
-
             if self.mw.pan_slider and self.mw.zoom_slider:
                 self.mw.pan_slider.setValue(0)
                 self.mw.zoom_slider.setValue(self.mw.slider_scale_factor)
@@ -100,6 +98,9 @@ class AppLogic(QtCore.QObject):
 
         # Apply all (now reset) filters to update the main list and timeline
         self._apply_filters_and_update_views()
+
+        # This rebuilds the message type tree and selects all by default, now using the correctly populated self.filtered_df
+        self._rebuild_message_types_data_and_list(select_all_visible=True)
         
         # Update timeline display based on current (likely all) message types and granularity
         # This needs to happen *after* _apply_filters_and_update_views if that method doesn't already handle it
@@ -169,10 +170,8 @@ class AppLogic(QtCore.QObject):
                 self.mw.message_types_tree.clear()
             return
 
-        selected_levels = {level for level, is_selected in self.selected_log_levels.items() if is_selected}
-        
-        # Filter by selected log levels
-        filtered_df = self.mw.log_entries_full[self.mw.log_entries_full['log_level'].isin(selected_levels)]
+        # Use the already filtered DataFrame from the main logic, which includes search and level filters.
+        filtered_df = self.filtered_df
         
         if filtered_df.empty:
             self.message_types_data_for_list = pd.DataFrame(columns=['logger_name', 'count'])
@@ -319,6 +318,7 @@ class AppLogic(QtCore.QObject):
         self.current_search_text = search_text.strip()
         # _apply_filters_and_update_views will handle empty log_entries_full or empty search_text
         self._apply_filters_and_update_views()
+        self._rebuild_message_types_data_and_list(select_all_visible=True) # Rebuild types based on search results
         
         # Status bar message is now handled by _apply_filters_and_update_views, 
         # but we can add a specific search status message here if desired, or let the generic one suffice.
@@ -379,6 +379,7 @@ class AppLogic(QtCore.QObject):
 
         # Apply the combined mask
         filtered_df = self.mw.log_entries_full[combined_mask]
+        self.filtered_df = filtered_df # Store the filtered df for other parts of the app to use
         filtered_entries_list = filtered_df.to_dict('records')
 
         if self.mw.selected_messages_list:

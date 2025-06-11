@@ -20,13 +20,14 @@ The iObeya Timeline Log Analyzer is a Python-based desktop application designed 
     *   Adjustable granularity (Day, Hour, Minute) for the timeline display.
     *   Zoom and pan capabilities on the timeline.
     *   When more than 10 message types are selected, their individual bars in the timeline are aggregated into a single "Other Types" bar to maintain clarity.
-*   **Powerful Filtering**: Combine multiple filters for precise analysis:
-    *   Filter by **Log Level** (INFO, WARN, ERROR, DEBUG).
-    *   Filter by **Message Type** (derived from logger names).
-    *   Filter by a specific **Time Range** by clicking and dragging on the timeline.
-    *   Perform **Text Search** on log message previews.
+*   **Powerful Filtering & Search**: Combine multiple filters for precise analysis:
+    *   **Full-Text Search**: Instant search on the entire content of all log messages using a high-performance SQLite FTS5 index.
+    *   **Log Level Filtering**: Use checkable buttons (INFO, WARN, ERROR, DEBUG) in the toolbar to select multiple levels simultaneously.
+    *   **Message Type Filtering**: Select specific message types from the list on the left.
+    *   **Time Range Filtering**: Click and drag on the timeline to isolate events in a specific time window.
+    *   **Coherent Filtering**: Applying a full-text search or a log-level filter will also dynamically update the list of available Message Types to only show relevant types.
 *   **Detailed Log View**: Select a log entry from the list to see its full, multi-line content in a dedicated details panel.
-*   **Statistics Panel**: View summary statistics about the loaded log data.
+*   **Statistics Panel**: View summary statistics and a Pareto chart of the most frequent message types.
 *   **Memory Efficient**: Utilizes pandas DataFrames and on-demand loading of full log entries to handle very large files.
 *   **About Dialog**: Includes application version, copyright information, and a fun hidden easter egg.
 
@@ -77,6 +78,15 @@ The iObeya Timeline Log Analyzer is a Python-based desktop application designed 
 
 ## Known Issues / Future Enhancements
 
-*   Full-text search on complete log messages (currently searches previews) could be a future enhancement.
 *   Support for more diverse log formats.
+*   Add more chart types to the statistics panel.
+
+## Version History
+
+*   **v4.1.0** (Current)
+    *   **Feature**: Integrated high-performance full-text search using SQLite FTS5.
+    *   **Feature**: Restored and enhanced the main toolbar with checkable log level filters and a search widget.
+    *   **Feature**: Implemented coherent filtering, where search and log level filters dynamically update the Message Types list.
+    *   **Fix**: Resolved multiple bugs, including crashes in the statistics panel and logical errors in filter application.
+    *   **UI**: Improved general UI stability and responsiveness.
 
