@@ -181,24 +181,40 @@ class VirtualTreeWidget(QtWidgets.QTreeWidget):
 class SearchWidget(QtWidgets.QWidget):
     search_changed = QtCore.pyqtSignal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, placeholder_text=None):
         super().__init__(parent)
         layout = QtWidgets.QHBoxLayout(self);
         layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)  # Consistent spacing for the layout elements
+
         layout.addWidget(QtWidgets.QLabel("🔍"))  # Search icon
+
         self.search_input = QtWidgets.QLineEdit();
-        self.search_input.setPlaceholderText("Search messages and logger names...")
+        if placeholder_text:
+            self.search_input.setPlaceholderText(placeholder_text)
+        else:
+            self.search_input.setPlaceholderText("Search messages and logger names...") # Default if none provided
+        self.search_input.setClearButtonEnabled(True)
         self.search_input.textChanged.connect(self._on_text_changed_debounced)
         layout.addWidget(self.search_input)
+
         self.clear_button = QtWidgets.QPushButton("✕");
         self.clear_button.setFixedSize(24, 24)  # Small, square button
         self.clear_button.setToolTip("Clear search");
         self.clear_button.clicked.connect(self.clear_search)
         layout.addWidget(self.clear_button)
 
+        # Timer for debouncing search input
         self.search_timer = QtCore.QTimer();
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self._emit_search_changed)
+
+        self.clear_button = QtWidgets.QPushButton("✕");
+        self.clear_button.setFixedSize(24, 24)  # Small, square button
+        self.clear_button.setToolTip("Clear search");
+        self.clear_button.clicked.connect(self.clear_search)
+        layout.addWidget(self.clear_button)
+
 
     def _on_text_changed_debounced(self, text): self.search_timer.stop(); self.search_timer.start(300)  # 300ms debounce
 

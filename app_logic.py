@@ -1,4 +1,5 @@
 # app_logic.py
+import sqlite3
 import pandas as pd
 from PyQt5 import QtCore  # Assurez-vous que QtCore est importé
 from collections import Counter
@@ -16,6 +17,7 @@ class AppLogic(QtCore.QObject):
         self.timeline_filter_start_time = None
         self.timeline_filter_end_time = None
         self.current_search_text = ""
+        self.fts_db_conn = None
 
 
     # ... (reset_all_filters_and_view, update_log_summary_display, _rebuild_message_types_data_and_list)
@@ -363,11 +365,17 @@ class AppLogic(QtCore.QObject):
             combined_mask &= (self.mw.log_entries_full['datetime_obj'] >= self.timeline_filter_start_time) & \
                              (self.mw.log_entries_full['datetime_obj'] < self.timeline_filter_end_time)
 
-        # 4. Apply Search Text Filter
-        if self.current_search_text:
-            # Assuming 'message' is the column to search in. Adjust if necessary.
-            # Using regex=False for literal search, case=False for case-insensitivity.
-            combined_mask &= self.mw.log_entries_full['message'].str.contains(self.current_search_text, case=False, na=False, regex=False)
+        # 4. Apply Full-Text Search Filter
+        if self.current_search_text and self.current_search_text.strip():
+            matching_indices = self._search_fts_index(self.current_search_text)
+            
+            # Create a boolean mask based on FTS results.
+            # If search_text was provided but FTS found no matches, fts_mask will be all False.
+            # If FTS found matches, fts_mask will be True for those indices.
+            # self.mw.log_entries_full.index should correspond to rowids in FTS.
+            fts_mask = self.mw.log_entries_full.index.isin(list(matching_indices))
+            combined_mask &= fts_mask
+        # If current_search_text is empty or only whitespace, no FTS filtering is applied here.
 
         # Apply the combined mask
         filtered_df = self.mw.log_entries_full[combined_mask]
@@ -475,49 +483,52 @@ class AppLogic(QtCore.QObject):
         self.trigger_timeline_update_from_selection()
 
     def set_check_state_for_visible_types(self, check_state):
-        if self.mw._is_batch_updating_ui or not self.mw.message_types_tree: return
+        if self.mw._is_batch_updating_ui: return
         self.mw._enter_batch_update()
         self.mw.message_types_tree.blockSignals(True)
         for i in range(self.mw.message_types_tree.topLevelItemCount()):
             item = self.mw.message_types_tree.topLevelItem(i)
             if not item.isHidden():
-                if item.checkState(0) != check_state: item.setCheckState(0, check_state)
+                if item.checkState(0) != check_state:
+                    item.setCheckState(0, check_state)
         self.mw.message_types_tree.blockSignals(False)
         self.mw._exit_batch_update()
-        self.trigger_timeline_update_from_selection()
+        self.trigger_timeline_update_from_selection() # This will call _apply_filters_and_update_views indirectly
 
-    def filter_by_specific_level(self, level_to_show):
-        if self.mw._is_batch_updating_ui: return
-        self.mw._enter_batch_update()
-        try:
-            # Set current filter to only this level
-            self.selected_log_levels = {lvl: (lvl == level_to_show) for lvl in ['INFO', 'WARN', 'ERROR', 'DEBUG']}
-            
-            # Update UI elements that depend on log level counts or selections
-            self.update_log_summary_display() # Updates counts on buttons
-            
-            # Rebuild message type list based on the new log level filter, selecting all visible types
-            # This ensures the message type tree reflects types present in the new level-filtered subset
+    def toggle_log_level_filter(self, level_name, is_checked):
+        if level_name in self.selected_log_levels:
+            self.selected_log_levels[level_name] = is_checked
             self._rebuild_message_types_data_and_list(select_all_visible=True)
+            self._apply_filters_and_update_views()
+            # MainWindow should have a method to update button text/style if counts are displayed on them
+            self.update_log_summary_display() # This updates log level button texts with counts
+            if self.mw.statusBar():
+                active_levels = [lvl for lvl, active in self.selected_log_levels.items() if active]
+                if not active_levels:
+                    msg = "Aucun niveau de log sélectionné."
+                elif len(active_levels) == len(self.selected_log_levels):
+                    msg = "Tous les niveaux de log sélectionnés."
+                else:
+                    msg = f"Filtre de niveau de log mis à jour: {', '.join(active_levels)}"
+                self.mw.statusBar().showMessage(msg, 3000)
 
-        finally:
-            self.mw._exit_batch_update()
-        
-        # Apply all current filters (including the new level filter) to update the main list
-        self._apply_filters_and_update_views()
-        
-        # Update the timeline display based on the new selection of message types (which were rebuilt)
-        # and current granularity.
-        selected_types_for_timeline = set()
-        if self.mw.message_types_tree:
-            for i in range(self.mw.message_types_tree.topLevelItemCount()):
-                item = self.mw.message_types_tree.topLevelItem(i)
-                if item.checkState(0) == QtCore.Qt.Checked: # Should be all visible types after rebuild
-                    selected_types_for_timeline.add(item.text(0))
-        
-        current_granularity = self.mw.granularity_combo.currentText() if self.mw.granularity_combo else 'minute'
-        if self.mw.timeline_canvas:
-            self.mw.timeline_canvas.update_display_config(selected_types_for_timeline, current_granularity)
+    def filter_by_specific_level(self, level_name):
+        # This method provides an exclusive filter for a given level.
+        # Useful if triggered from a context menu or other UI element for quick isolation.
+        if level_name in self.selected_log_levels:
+            for lvl in self.selected_log_levels:
+                self.selected_log_levels[lvl] = (lvl == level_name)
+            
+            self._rebuild_message_types_data_and_list(select_all_visible=True)
+            self._apply_filters_and_update_views()
+            # Update button states in UI (MainWindow needs a method for this)
+            if hasattr(self.mw, 'update_log_level_button_states'): # Check if main window has this method
+                self.mw.update_log_level_button_states(self.selected_log_levels)
+            else: # Fallback to updating summary which also refreshes buttons if they show counts
+                self.update_log_summary_display()
+
+            if self.mw.statusBar():
+                self.mw.statusBar().showMessage(f"Filtrage exclusif sur le niveau {level_name}", 3000)
 
     def apply_date_filter_to_timeline(self):
         date_range = getattr(self.mw, 'date_filter_range', None)
@@ -595,3 +606,89 @@ class AppLogic(QtCore.QObject):
         # Update the view
         if hasattr(canvas, 'plot_timeline'):
             canvas.plot_timeline(xlim_override=(new_min, new_max))
+
+    def _build_fts_index(self, df):
+        if self.fts_db_conn:
+            try:
+                self.fts_db_conn.close()
+                self.fts_db_conn = None # Ensure it's None if closed
+            except Exception as e:
+                # Ideally, log this error
+                print(f"Error closing existing FTS DB connection: {e}")
+                self.fts_db_conn = None # Ensure it's None even if close fails
+        
+        if df.empty:
+            # print("DataFrame is empty, skipping FTS index build.") # Optional: log or print
+            return
+
+        try:
+            self.fts_db_conn = sqlite3.connect(':memory:')
+            cursor = self.fts_db_conn.cursor()
+            cursor.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS log_index USING fts5(
+                    message_content,
+                    tokenize='porter unicode61'
+                );
+            """)
+
+            if 'message' not in df.columns:
+                print("Error: 'message' column not found in DataFrame for FTS indexing.")
+                self.fts_db_conn.close()
+                self.fts_db_conn = None
+                return
+
+            messages = df['message'].fillna('').astype(str)
+            batch_size = 10000  # Process in batches
+            
+            for i in range(0, len(df), batch_size):
+                batch_data = []
+                # Use df.index directly for rowid if it's suitable (e.g., unique integers)
+                # Or generate rowids if df.index is not simple integers
+                for original_index, message_content in messages.iloc[i:i+batch_size].items():
+                    batch_data.append((original_index, message_content))
+                
+                if batch_data:
+                    cursor.executemany("INSERT INTO log_index (rowid, message_content) VALUES (?, ?)", batch_data)
+            
+            self.fts_db_conn.commit()
+            # print(f"FTS index built successfully with {len(df)} entries.") # Optional: log or print
+        except sqlite3.Error as e:
+            print(f"SQLite error during FTS index build: {e}")
+            if self.fts_db_conn:
+                try:
+                    self.fts_db_conn.close()
+                except Exception as e_close:
+                    print(f"Error closing FTS DB connection after build error: {e_close}")
+            self.fts_db_conn = None
+        except Exception as e:
+            print(f"Unexpected error during FTS index build: {e}")
+            if self.fts_db_conn:
+                try:
+                    self.fts_db_conn.close()
+                except Exception as e_close:
+                    print(f"Error closing FTS DB connection after unexpected build error: {e_close}")
+            self.fts_db_conn = None
+
+    def _search_fts_index(self, search_text):
+        if not self.fts_db_conn or not search_text or search_text.strip() == "":
+            return set()
+
+        try:
+            cursor = self.fts_db_conn.cursor()
+            # FTS5 query syntax: wrap search_text in quotes for phrase search if needed,
+            # or use NEAR, AND, OR, NOT operators. For simple term matching, this is okay.
+            # To make it more robust, consider cleaning/preparing search_text.
+            # Example: if search_text is "error X", FTS5 treats it as "error AND X".
+            # If you want phrase "error X", it should be '"error X"'.
+            # For now, simple matching.
+            query = "SELECT rowid FROM log_index WHERE message_content MATCH ?"
+            cursor.execute(query, (search_text,))
+            
+            matching_indices = {row[0] for row in cursor.fetchall()}
+            return matching_indices
+        except sqlite3.Error as e:
+            print(f"SQLite error during FTS search for '{search_text}': {e}")
+            return set()
+        except Exception as e:
+            print(f"Unexpected error during FTS search for '{search_text}': {e}")
+            return set()

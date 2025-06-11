@@ -60,3 +60,6 @@ venv.bak/
 # IDEs
 .idea/
 .vscode/
+
+# MacOS
+.DS_Store

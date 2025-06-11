@@ -28,6 +28,20 @@ class LogLoaderThread(QtCore.QThread):
         self.encodings_to_try = ['utf-8', 'utf-8-sig', 'latin1', 'cp1252']  # Common encodings
         self.datetime_format_for_parsing = '%Y-%m-%d %H:%M:%S'
 
+    def get_source_name(self):
+        if self.archive_path:
+            return os.path.basename(self.archive_path)
+        elif self.file_path:
+            return os.path.basename(self.file_path)
+        return "Unknown Source"
+
+    def get_source_type(self):
+        if self.archive_path:
+            return "archive"
+        elif self.file_path:
+            return "single_file"
+        return None
+
     def run(self):
         all_log_entries = []
         failed_files_summary = []  # List of (filename, reason) tuples

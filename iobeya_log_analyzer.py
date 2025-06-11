@@ -98,87 +98,126 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
         self.app_logic.reset_all_filters_and_view(initial_load=True)
 
     def create_toolbar(self):
-        toolbar = self.addToolBar("File")
-        toolbar.setMovable(False);
+        toolbar = self.addToolBar("Main Toolbar")
+        toolbar.setMovable(False)
         toolbar.setFloatable(False)
+        toolbar.setIconSize(QtCore.QSize(16, 16)) # Optional: for icon consistency
 
-        load_file_action = QtWidgets.QAction("Load File", self)
+        # Load File Action
+        load_file_action = QtWidgets.QAction(self.style().standardIcon(QtWidgets.QStyle.SP_DialogOpenButton), "Load File", self)
         load_file_action.triggered.connect(self.load_log_file)
         load_file_action.setShortcut(QtGui.QKeySequence.Open)
         toolbar.addAction(load_file_action)
 
-        load_archive_action = QtWidgets.QAction("Load Archive", self)
+        # Load Archive Action
+        load_archive_action = QtWidgets.QAction(self.style().standardIcon(QtWidgets.QStyle.SP_DirIcon), "Load Archive", self)  # SP_DriveArchiveIcon was unavailable
         load_archive_action.triggered.connect(self.load_log_archive)
         toolbar.addAction(load_archive_action)
 
         toolbar.addSeparator()
-        reset_view_action = QtWidgets.QAction("Reset View", self)
+
+        # Reset View Action
+        reset_view_action = QtWidgets.QAction(self.style().standardIcon(QtWidgets.QStyle.SP_DialogResetButton), "Reset View", self)
         reset_view_action.setToolTip("Reset all filters and timeline zoom")
         reset_view_action.triggered.connect(lambda: self.app_logic.reset_all_filters_and_view(initial_load=False))
         toolbar.addAction(reset_view_action)
+
         toolbar.addSeparator()
 
-        summary_widget = QtWidgets.QWidget()
-        summary_layout = QtWidgets.QHBoxLayout(summary_widget)
-        summary_layout.setContentsMargins(8, 4, 8, 4);
-        summary_layout.setSpacing(10)
+        # Search Widget (Main Search Bar)
+        self.search_widget = SearchWidget(placeholder_text="Search all log messages (full-text)...")
+        self.search_widget.search_changed.connect(self.app_logic.on_search_changed)
+        self.search_widget.setMinimumWidth(300) # Give it some decent width
+        toolbar.addWidget(self.search_widget)
 
+        toolbar.addSeparator()
+
+        # Log Level Filter Buttons
+        btn_style = "QPushButton {{ background-color: {bg}; color: {fg}; border: 1px solid {border_color}; padding: 3px 7px; border-radius: 4px; font-weight: bold; font-size: 10px; }} QPushButton:hover {{ background-color: {bg_hover}; }} QPushButton:checked {{ background-color: {bg_checked}; border: 1px solid {fg}; }}"
+        
+        self.error_btn = QtWidgets.QPushButton("ERR") # Shorter text for compactness
+        self.error_btn.setToolTip("Filter by ERROR level")
+        self.error_btn.setCheckable(True)
+        self.error_btn.setChecked(self.app_logic.selected_log_levels.get('ERROR', True))
+        self.error_btn.setStyleSheet(btn_style.format(bg='#FFEBEE', fg='#D32F2F', border_color='#FFCDD2', bg_hover='#FFCDD2', bg_checked='#F44336'))
+        self.error_btn.clicked.connect(lambda checked: self.app_logic.toggle_log_level_filter('ERROR', checked))
+        toolbar.addWidget(self.error_btn)
+
+        self.warn_btn = QtWidgets.QPushButton("WRN") # Shorter text
+        self.warn_btn.setToolTip("Filter by WARN level")
+        self.warn_btn.setCheckable(True)
+        self.warn_btn.setChecked(self.app_logic.selected_log_levels.get('WARN', True))
+        self.warn_btn.setStyleSheet(btn_style.format(bg='#FFF3E0', fg='#F57C00', border_color='#FFE0B2', bg_hover='#FFE0B2', bg_checked='#FF9800'))
+        self.warn_btn.clicked.connect(lambda checked: self.app_logic.toggle_log_level_filter('WARN', checked))
+        toolbar.addWidget(self.warn_btn)
+
+        self.info_btn = QtWidgets.QPushButton("INF") # Shorter text
+        self.info_btn.setToolTip("Filter by INFO level")
+        self.info_btn.setCheckable(True)
+        self.info_btn.setChecked(self.app_logic.selected_log_levels.get('INFO', True))
+        self.info_btn.setStyleSheet(btn_style.format(bg='#E3F2FD', fg='#1976D2', border_color='#BBDEFB', bg_hover='#BBDEFB', bg_checked='#2196F3'))
+        self.info_btn.clicked.connect(lambda checked: self.app_logic.toggle_log_level_filter('INFO', checked))
+        toolbar.addWidget(self.info_btn)
+
+        self.debug_btn = QtWidgets.QPushButton("DBG") # Shorter text
+        self.debug_btn.setToolTip("Filter by DEBUG level")
+        self.debug_btn.setCheckable(True)
+        self.debug_btn.setChecked(self.app_logic.selected_log_levels.get('DEBUG', True))
+        self.debug_btn.setStyleSheet(btn_style.format(bg='#F3E5F5', fg='#7B1FA2', border_color='#E1BEE7', bg_hover='#E1BEE7', bg_checked='#9C27B0'))
+        self.debug_btn.clicked.connect(lambda checked: self.app_logic.toggle_log_level_filter('DEBUG', checked))
+        toolbar.addWidget(self.debug_btn)
+        
+        toolbar.addSeparator()
+
+        # Summary Information Widget (Period, Stats, Total)
+        # This will be a QWidget with QHBoxLayout to group these labels and button
+        summary_info_widget = QtWidgets.QWidget()
+        summary_info_layout = QtWidgets.QHBoxLayout(summary_info_widget)
+        summary_info_layout.setContentsMargins(5, 0, 5, 0) # Minimal margins
+        summary_info_layout.setSpacing(8)
+
+        summary_info_layout.addWidget(QtWidgets.QLabel("📅"))
         self.period_label = QtWidgets.QLabel("No log loaded")
-        self.period_label.setStyleSheet(
-            "QLabel { background-color: #E8F5E8; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 11px; }")
-        summary_layout.addWidget(QtWidgets.QLabel("📅"));
-        summary_layout.addWidget(self.period_label)
+        self.period_label.setToolTip("Date range of loaded logs")
+        self.period_label.setStyleSheet("QLabel { padding: 2px 4px; border-radius: 3px; background-color: #E8F5E9; font-family: monospace; font-size: 10px; }")
+        summary_info_layout.addWidget(self.period_label)
+
+        summary_info_layout.addSpacing(10)
 
         self.stats_button = QtWidgets.QPushButton("📊")
-        self.stats_button.setToolTip("Show Global Statistics");
-        self.stats_button.setFixedSize(24, 24)
-        self.stats_button.setStyleSheet(
-            "QPushButton { font-size: 14px; border: none; padding: 0px; } QPushButton:hover { background-color: #e0e0e0; }")
+        self.stats_button.setToolTip("Show Global Statistics")
+        self.stats_button.setFixedSize(QtCore.QSize(22, 22))
+        self.stats_button.setStyleSheet("QPushButton { font-size: 14px; border: none; padding: 0px; } QPushButton:hover { background-color: #e0e0e0; }")
         self.stats_button.clicked.connect(self.show_stats_panel)
-        summary_layout.addWidget(self.stats_button)
+        summary_info_layout.addWidget(self.stats_button)
+
+        summary_info_layout.addSpacing(10)
 
         self.total_label = QtWidgets.QLabel("0 entries")
-        self.total_label.setStyleSheet(
-            "QLabel { background-color: #E3F2FD; padding: 4px 8px; border-radius: 4px; font-weight: bold; }")
-        summary_layout.addWidget(self.total_label)
+        self.total_label.setToolTip("Total log entries loaded")
+        self.total_label.setStyleSheet("QLabel { padding: 2px 4px; border-radius: 3px; background-color: #E3F2FD; font-weight: bold; font-size: 10px; }")
+        summary_info_layout.addWidget(self.total_label)
+        
+        summary_info_widget.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        toolbar.addWidget(summary_info_widget)
 
-        toolbar.addWidget(summary_widget)
-
-        # Add a spacer to push the about button to the right
+        # Spacer to push About button to the right
         spacer = QtWidgets.QWidget()
         spacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         toolbar.addWidget(spacer)
 
-        # Add About button
+        # About Action
         about_action = QtWidgets.QAction(self.style().standardIcon(QtWidgets.QStyle.SP_MessageBoxInformation), "About", self)
         about_action.setToolTip("Show application information")
         about_action.triggered.connect(self.show_about_dialog)
         toolbar.addAction(about_action)
 
-        btn_style = "QPushButton {{ background-color: {bg}; color: {fg}; border: 1px solid {fg}; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 10px; }} QPushButton:hover {{ background-color: {bg_hover}; }}"
-        self.error_btn = QtWidgets.QPushButton("ERROR: 0");
-        self.error_btn.setStyleSheet(btn_style.format(bg='#FFEBEE', fg='#D32F2F', bg_hover='#FFCDD2'));
-        self.error_btn.clicked.connect(lambda: self.app_logic.filter_by_specific_level('ERROR'))
-        summary_layout.addWidget(self.error_btn)
-        self.warn_btn = QtWidgets.QPushButton("WARN: 0");
-        self.warn_btn.setStyleSheet(btn_style.format(bg='#FFF3E0', fg='#F57C00', bg_hover='#FFE0B2'));
-        self.warn_btn.clicked.connect(lambda: self.app_logic.filter_by_specific_level('WARN'))
-        summary_layout.addWidget(self.warn_btn)
-        self.info_btn = QtWidgets.QPushButton("INFO: 0");
-        self.info_btn.setStyleSheet(btn_style.format(bg='#E3F2FD', fg='#1976D2', bg_hover='#BBDEFB'));
-        self.info_btn.clicked.connect(lambda: self.app_logic.filter_by_specific_level('INFO'))
-        summary_layout.addWidget(self.info_btn)
-        self.debug_btn = QtWidgets.QPushButton("DEBUG: 0");
-        self.debug_btn.setStyleSheet(btn_style.format(bg='#F3E5F5', fg='#7B1FA2', bg_hover='#E1BEE7'));
-        self.debug_btn.clicked.connect(lambda: self.app_logic.filter_by_specific_level('DEBUG'))
-        summary_layout.addWidget(self.debug_btn)
-        summary_layout.addStretch();
-
-        summary_widget.setStyleSheet(
-            "QWidget { background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 6px; }")
-        summary_widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed);
-        summary_widget.setMaximumHeight(40);
-        toolbar.addWidget(summary_widget)
+    def update_log_level_button_states(self, selected_levels):
+        """Updates the checked state of log level filter buttons."""
+        if hasattr(self, 'error_btn'): self.error_btn.setChecked(selected_levels.get('ERROR', False))
+        if hasattr(self, 'warn_btn'):  self.warn_btn.setChecked(selected_levels.get('WARN', False))
+        if hasattr(self, 'info_btn'):  self.info_btn.setChecked(selected_levels.get('INFO', False))
+        if hasattr(self, 'debug_btn'): self.debug_btn.setChecked(selected_levels.get('DEBUG', False))
 
     def create_timeline_section_with_sliders(self):
         timeline_section_widget = QtWidgets.QWidget()
@@ -460,7 +499,16 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
             self.loading_dialog.update_status("Finalizing...", "Displaying results.")
             self.loading_dialog.accept()
         self.log_entries_full = log_entries_df
+        self.current_loaded_source_name = self.loader_thread.get_source_name() if self.loader_thread else "Unknown Source" # Make sure this is set before using in title
         self.setWindowTitle(f"iObeya Timeline Log Analyzer - {self.current_loaded_source_name}")
+
+        # Build FTS index using AppLogic
+        if self.app_logic:
+            if not self.log_entries_full.empty:
+                self.app_logic._build_fts_index(self.log_entries_full)
+            else:
+                # If logs are empty, ensure any previous FTS index is cleared/reset
+                self.app_logic._build_fts_index(pd.DataFrame())
 
         if hasattr(self.selected_messages_list, 'set_all_items_data'):
             self.selected_messages_list.set_all_items_data([])
@@ -714,7 +762,7 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
             self.details_text.clear()
 
     def show_stats_panel(self):
-        if not self.log_entries_full:
+        if self.log_entries_full.empty:
             QtWidgets.QMessageBox.information(self, "No Data", "Please load a log file first.")
             return
         if self.stats_dialog is None or not self.stats_dialog.isVisible():

@@ -113,7 +113,7 @@ class StatsDialog(QtWidgets.QDialog):
         ax2.tick_params(axis='y', labelcolor='C1')
         ax2.set_ylim(0, 105);  # Slight margin above 100%
 
-        fig.suptitle(f"Pareto Chart of Message Types (Top {len(df_top)})", fontsize=12)
+        fig.suptitle(f"Pareto Chart of Message Types (Top {len(top_20_counts)})", fontsize=12)
         fig.tight_layout(rect=[0, 0.05, 1, 0.95]);
         self.pareto_canvas.draw()
 

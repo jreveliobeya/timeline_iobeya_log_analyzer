@@ -85,7 +85,7 @@ class TimelineCanvas(FigureCanvas):
         if self.current_time_granularity == 'day':
             rounded_time_series = dts.dt.floor('D')
         elif self.current_time_granularity == 'hour':
-            rounded_time_series = dts.dt.floor('H')
+            rounded_time_series = dts.dt.floor('h')
         else:  # 'minute'
             rounded_time_series = dts.dt.floor('T')
         
