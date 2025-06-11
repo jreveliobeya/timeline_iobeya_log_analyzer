@@ -21,13 +21,11 @@ class StatsDialog(QtWidgets.QDialog):
         layout.addWidget(tab_widget)
 
         # Summary Tab
-        summary_tab = QtWidgets.QWidget();
-        summary_layout = QtWidgets.QVBoxLayout(summary_tab)
-        self.summary_text_edit = QtWidgets.QTextEdit();
-        self.summary_text_edit.setReadOnly(True)
-        self.summary_text_edit.setFontFamily("monospace");
-        summary_layout.addWidget(self.summary_text_edit)
-        tab_widget.addTab(summary_tab, "Overall Summary");
+        self.summary_tab = QtWidgets.QWidget()
+        summary_layout = QtWidgets.QVBoxLayout(self.summary_tab)
+        summary_layout.setContentsMargins(10, 10, 10, 10)
+        summary_layout.setSpacing(15)
+        tab_widget.addTab(self.summary_tab, "Overall Summary")
         self.populate_summary_text()
 
         # Pareto Chart Tab
@@ -43,18 +41,20 @@ class StatsDialog(QtWidgets.QDialog):
         dist_chart_layout = QtWidgets.QVBoxLayout(dist_chart_tab)
 
         # Radio buttons for chart type selection
-        self.chart_type_groupbox = QtWidgets.QGroupBox("Chart Data Type")
-        chart_type_layout = QtWidgets.QHBoxLayout()
+        radio_container = QtWidgets.QWidget()
+        chart_type_layout = QtWidgets.QHBoxLayout(radio_container)
+        chart_type_layout.setContentsMargins(0, 0, 0, 0)
         self.radio_level = QtWidgets.QRadioButton("By Log Level")
         self.radio_message_type = QtWidgets.QRadioButton("By Message Type")
-        self.radio_level.setChecked(True) # Default
+        self.radio_level.setChecked(True)
         chart_type_layout.addWidget(self.radio_level)
         chart_type_layout.addWidget(self.radio_message_type)
-        self.chart_type_groupbox.setLayout(chart_type_layout)
-        dist_chart_layout.addWidget(self.chart_type_groupbox)
+        chart_type_layout.addStretch(1)
+        dist_chart_layout.addWidget(radio_container)
 
-        self.dist_canvas = FigureCanvas(Figure(figsize=(5, 4))); # Renamed from level_dist_canvas
-        dist_chart_layout.addWidget(self.dist_canvas)
+        self.dist_canvas = FigureCanvas(Figure(figsize=(5, 4)))
+        # Add stretch factor to the canvas to make it take available space
+        dist_chart_layout.addWidget(self.dist_canvas, 1)
         tab_widget.addTab(dist_chart_tab, "Distribution Chart"); # Renamed tab
 
         self.radio_level.toggled.connect(self._update_distribution_chart_type)
@@ -63,39 +63,71 @@ class StatsDialog(QtWidgets.QDialog):
         self._plot_distribution_chart() # Initial plot
 
     def populate_summary_text(self):
-        if self.all_log_entries.empty: 
-            self.summary_text_edit.setText("No log entries loaded.")
+        layout = self.summary_tab.layout()
+        # Clear previous widgets
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        if self.all_log_entries.empty:
+            layout.addWidget(QtWidgets.QLabel("No log entries loaded."))
             return
 
+        # --- Data Calculation ---
         total_entries = len(self.all_log_entries)
         first_dt_obj = self.all_log_entries['datetime_obj'].min()
         last_dt_obj = self.all_log_entries['datetime_obj'].max()
-
-        period_str = f"{first_dt_obj.strftime('%Y-%m-%d %H:%M:%S')} to {last_dt_obj.strftime('%Y-%m-%d %H:%M:%S')}"
-        if pd.notna(first_dt_obj) and pd.notna(last_dt_obj):
-            duration = last_dt_obj - first_dt_obj
-            period_str += f" (Duration: {str(duration).split('.')[0]})"
-
         level_counts = self.all_log_entries['log_level'].value_counts()
         logger_counts = self.all_log_entries['logger_name'].value_counts()
 
-        summary = [
-            f"Global Log Statistics\n{'=' * 40}\n",
-            f"Time Period: {period_str}",
-            f"Total Entries: {total_entries:,}",
-            f"Unique Message Types (Loggers): {len(logger_counts):,}\n",
-            "Entries by Log Level:"
-        ]
+        # --- General Stats GroupBox ---
+        general_group = QtWidgets.QGroupBox("General Statistics")
+        form_layout = QtWidgets.QFormLayout(general_group)
+        form_layout.setSpacing(10)
+
+        period_str = "N/A"
+        if pd.notna(first_dt_obj) and pd.notna(last_dt_obj):
+            duration = last_dt_obj - first_dt_obj
+            period_str = (f"{first_dt_obj.strftime('%Y-%m-%d %H:%M:%S')} to "
+                          f"{last_dt_obj.strftime('%Y-%m-%d %H:%M:%S')} "
+                          f"(Duration: {str(duration).split('.')[0]})")
+        
+        form_layout.addRow(QtWidgets.QLabel("<b>Time Period:</b>"), QtWidgets.QLabel(period_str))
+        form_layout.addRow(QtWidgets.QLabel("<b>Total Entries:</b>"), QtWidgets.QLabel(f"<b>{total_entries:,}</b>"))
+        form_layout.addRow(QtWidgets.QLabel("<b>Unique Message Types:</b>"), QtWidgets.QLabel(f"<b>{len(logger_counts):,}</b>"))
+        layout.addWidget(general_group)
+
+        # --- Log Level Breakdown GroupBox ---
+        level_group = QtWidgets.QGroupBox("Log Level Breakdown")
+        level_layout = QtWidgets.QFormLayout(level_group)
+        level_layout.setSpacing(10)
+        colors_map = {'ERROR': '#D32F2F', 'WARN': '#F57C00', 'INFO': '#1976D2', 'DEBUG': '#7B1FA2'}
 
         for level in ['ERROR', 'WARN', 'INFO', 'DEBUG']:
             count = level_counts.get(level, 0)
-            summary.append(f"  - {level:<8}: {count:>10,} ({count / total_entries * 100:.2f}%)")
-        
-        summary.append("\nTop 10 Most Frequent Message Types:")
-        for logger, count in logger_counts.nlargest(10).items():
-            summary.append(f"  - {logger:<50}: {count:>10,}")
-        
-        self.summary_text_edit.setText("\n".join(summary))
+            percentage = (count / total_entries) * 100 if total_entries > 0 else 0
+            level_label = QtWidgets.QLabel(f"<b><font color='{colors_map.get(level, '#000000')}'>{level}</font></b>")
+            value_label = QtWidgets.QLabel(f"<b>{count:,}</b> ({percentage:.2f}%)")
+            level_layout.addRow(level_label, value_label)
+        layout.addWidget(level_group)
+
+        # --- Top 10 Messages GroupBox ---
+        top_messages_group = QtWidgets.QGroupBox("Top 10 Most Frequent Message Types")
+        top_messages_layout = QtWidgets.QGridLayout(top_messages_group)
+        top_messages_layout.setSpacing(10)
+        top_messages_layout.addWidget(QtWidgets.QLabel("<b>Message Type</b>"), 0, 0)
+        top_messages_layout.addWidget(QtWidgets.QLabel("<b>Count</b>"), 0, 1, QtCore.Qt.AlignRight)
+
+        for i, (logger, count) in enumerate(logger_counts.head(10).items(), 1):
+            logger_label = QtWidgets.QLabel(logger)
+            logger_label.setWordWrap(True)
+            count_label = QtWidgets.QLabel(f"<b>{count:,}</b>")
+            top_messages_layout.addWidget(logger_label, i, 0)
+            top_messages_layout.addWidget(count_label, i, 1, QtCore.Qt.AlignRight)
+        layout.addWidget(top_messages_group)
+
+        layout.addStretch()
 
     def plot_pareto_chart(self):
         if self.all_log_entries.empty: return

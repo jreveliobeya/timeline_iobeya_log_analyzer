@@ -20,6 +20,47 @@ class AppLogic(QtCore.QObject):
         self.current_search_text = ""
         self.fts_db_conn = None
 
+    def reset_for_new_data(self):
+        """Resets the entire UI and internal state in preparation for loading a new log file."""
+        self.mw._enter_batch_update()
+        try:
+            # 1. Reset internal data models
+            self.mw.log_entries_full = pd.DataFrame()
+            self.filtered_df = pd.DataFrame()
+            self.message_types_data_for_list = pd.DataFrame(columns=['logger_name', 'count'])
+            if self.fts_db_conn:
+                try:
+                    self.fts_db_conn.close()
+                except Exception:
+                    pass  # Ignore errors on close
+                self.fts_db_conn = None
+
+            # 2. Reset filter states
+            self.selected_log_levels = {'INFO': True, 'WARN': True, 'ERROR': True, 'DEBUG': True}
+            self.timeline_filter_active = False
+            self.timeline_filter_start_time = None
+            self.timeline_filter_end_time = None
+            self.current_search_text = ""
+
+            # 3. Clear UI widgets
+            if hasattr(self.mw, 'search_widget') and self.mw.search_widget: self.mw.search_widget.clear_search()
+            if hasattr(self.mw, 'message_type_search_input') and self.mw.message_type_search_input: self.mw.message_type_search_input.clear()
+            if hasattr(self.mw, 'message_types_list') and self.mw.message_types_list: self.mw.message_types_list.clear()
+            if hasattr(self.mw, 'selected_messages_list') and self.mw.selected_messages_list: self.mw.selected_messages_list.set_all_items_data([])
+            if hasattr(self.mw, 'details_text') and self.mw.details_text: self.mw.details_text.clear()
+
+            # 4. Reset timeline and summary
+            if hasattr(self.mw, 'timeline_canvas') and self.mw.timeline_canvas:
+                self.mw.timeline_canvas.set_full_log_data(pd.DataFrame())
+                granularity = self.mw.granularity_combo.currentText() if hasattr(self.mw, 'granularity_combo') and self.mw.granularity_combo else 'minute'
+                self.mw.timeline_canvas.update_display_config(set(), granularity)
+
+            self.update_timeline_sliders_range(0, 0)
+            self.update_log_summary_display()
+
+        finally:
+            self.mw._exit_batch_update()
+
 
     # ... (reset_all_filters_and_view, update_log_summary_display, _rebuild_message_types_data_and_list)
     # ... (trigger_timeline_update_from_selection, on_granularity_changed, on_slider_value_changed)
@@ -144,18 +185,39 @@ class AppLogic(QtCore.QObject):
                     btn.setText(f"{level}: 0")
         else:
             total_entries = len(self.mw.log_entries_full)
+            self.mw.total_label.setText(f"{total_entries:,} entrées")
             first_dt_obj = self.mw.log_entries_full['datetime_obj'].min()
             last_dt_obj = self.mw.log_entries_full['datetime_obj'].max()
 
             period_str = "N/A"
             if pd.notna(first_dt_obj) and pd.notna(last_dt_obj):
                 duration = last_dt_obj - first_dt_obj
-                period_str = (f"{first_dt_obj.strftime('%Y-%m-%d %H:%M:%S')} to "
-                              f"{last_dt_obj.strftime('%Y-%m-%d %H:%M:%S')} "
-                              f"(Duration: {str(duration).split('.')[0]})")
+            # Format for display
+            period_str_display = f"{first_dt_obj.strftime('%Y-%m-%d %H:%M')} to {last_dt_obj.strftime('%Y-%m-%d %H:%M')}"
+            duration_str_display = f"(Duration: {str(duration).split('.')[0]})"
+            self.mw.period_label.setText(f"{period_str_display} {duration_str_display}")
 
-            self.mw.period_label.setText(period_str)
-            self.mw.total_label.setText(f"{total_entries:,} entrées")
+            # Format for rich tooltip
+            start_str_tip = first_dt_obj.strftime('%A, %Y-%m-%d %H:%M:%S')
+            end_str_tip = last_dt_obj.strftime('%A, %Y-%m-%d %H:%M:%S')
+            level_counts = self.mw.log_entries_full['log_level'].value_counts()
+            
+            tooltip_html = f"""
+            <html><head/><body>
+            <p><b>Log Period Details</b></p>
+            <p><b>Start:</b> {start_str_tip}</p>
+            <p><b>End:</b>   {end_str_tip}</p>
+            <p><b>Duration:</b> {str(duration).split('.')[0]}</p>
+            <hr>
+            <p><b>Global Content Summary</b></p>
+            <p>Total Entries: {len(self.mw.log_entries_full):,}</p>
+            <p> - <b><font color='#D32F2F'>ERROR</font>:</b> {level_counts.get('ERROR', 0):,}</p>
+            <p> - <b><font color='#F57C00'>WARN</font>:</b>  {level_counts.get('WARN', 0):,}</p>
+            <p> - <b><font color='#1976D2'>INFO</font>:</b>  {level_counts.get('INFO', 0):,}</p>
+            <p> - <b><font color='#7B1FA2'>DEBUG</font>:</b> {level_counts.get('DEBUG', 0):,}</p>
+            </body></html>
+            """
+            self.mw.period_label.setToolTip(tooltip_html)
             
             level_counts = self.mw.log_entries_full['log_level'].value_counts()
             for level in ['INFO', 'WARN', 'ERROR', 'DEBUG']:
@@ -163,7 +225,10 @@ class AppLogic(QtCore.QObject):
                 if btn:
                     count = level_counts.get(level, 0)
                     btn.setText(f"{level}: {count:,}")
-                    btn.setChecked(self.selected_log_levels.get(level, False))
+                    is_checked = self.selected_log_levels.get(level, False)
+                    btn.setChecked(is_checked)
+                    btn.setProperty("isCheckedState", is_checked)
+                    btn.style().polish(btn)
 
     def _rebuild_message_types_data_and_list(self, select_all_visible=False):
         if not hasattr(self.mw, 'log_entries_full') or self.mw.log_entries_full.empty:
@@ -498,11 +563,17 @@ class AppLogic(QtCore.QObject):
         self.mw._exit_batch_update()
         self.trigger_timeline_update_from_selection() # This will call _apply_filters_and_update_views indirectly
 
-    def toggle_log_level_filter(self, level_name, is_checked):
+    def toggle_log_level_filter(self, level_name, widget, is_checked):
         if level_name in self.selected_log_levels:
             self.selected_log_levels[level_name] = is_checked
             self._rebuild_message_types_data_and_list(select_all_visible=True)
             self._apply_filters_and_update_views()
+
+            # Update QCheckBox visual state via dynamic property
+            if widget: # widget is the QCheckBox instance passed from the signal
+                widget.setProperty("isCheckedState", is_checked)
+                widget.style().polish(widget)
+
             # MainWindow should have a method to update button text/style if counts are displayed on them
             self.update_log_summary_display() # This updates log level button texts with counts
             if self.mw.statusBar():
@@ -514,7 +585,6 @@ class AppLogic(QtCore.QObject):
                 else:
                     msg = f"Filtre de niveau de log mis à jour: {', '.join(active_levels)}"
                 self.mw.statusBar().showMessage(msg, 3000)
-
     def filter_by_specific_level(self, level_name):
         # This method provides an exclusive filter for a given level.
         # Useful if triggered from a context menu or other UI element for quick isolation.

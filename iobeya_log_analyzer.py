@@ -19,7 +19,7 @@ from date_selection_dialog import DateSelectionDialog
 class LogAnalyzerApp(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.app_version = "4.1.0"
+        self.app_version = "4.2.0"
         self.setWindowTitle(f"iObeya Timeline Log Analyzer v{self.app_version}")
         self.resize(1600, 1000)
         self.log_entries_full = pd.DataFrame() # Initialize as DataFrame
@@ -140,30 +140,47 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
             "DEBUG": {"text": "DBG", "tooltip": "Filter by DEBUG level", "bg": "#777777", "checked_bg": "#5E5E5E", "hover": "#4F4F4F"}
         }
 
-        common_button_style_parts = "color: white; border: 1px solid #333; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 10pt;"
+        common_checkbox_style_parts = "color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 10pt; border: none;"
 
-        for level_name, styles in level_button_styles.items():
-            btn = QtWidgets.QPushButton(styles["text"])
-            btn.setToolTip(styles["tooltip"])
-            btn.setCheckable(True)
-            btn.setChecked(self.app_logic.selected_log_levels.get(level_name, True))
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {styles['bg']};
-                    {common_button_style_parts}
+        for level_name, styles_dict in level_button_styles.items(): 
+            cb = QtWidgets.QCheckBox(styles_dict["text"]) 
+            cb.setToolTip(styles_dict["tooltip"])
+            # Initial checked state and text update will be handled by AppLogic.update_log_summary_display
+            # which is called after app_logic is fully initialized.
+
+            # Store checkbox as instance attribute (using existing _btn naming for minimal changes in AppLogic getattr)
+            setattr(self, f"{level_name.lower()}_btn", cb)
+
+            # Connect stateChanged signal
+            cb.stateChanged.connect(
+                lambda state, widget=cb, name=level_name: \
+                self.app_logic.toggle_log_level_filter(name, widget, state == QtCore.Qt.Checked)
+            )
+
+            cb.setStyleSheet(f"""
+                QCheckBox {{
+                    background-color: {styles_dict['bg']};
+                    {common_checkbox_style_parts}
+                    spacing: 5px; /* Space between indicator and text */
                 }}
-                QPushButton:checked {{
-                    background-color: {styles['checked_bg']};
-                    border: 1px solid black; /* Darker border when checked */
+                QCheckBox[isCheckedState="true"] {{
+                    background-color: {styles_dict['checked_bg']};
                 }}
-                QPushButton:hover:!checked {{
-                    background-color: {styles['hover']};
+                QCheckBox[isCheckedState="false"]:hover {{
+                    background-color: {styles_dict['hover']};
                 }}
+                QCheckBox[isCheckedState="true"]:hover {{ /* Keep checked background color on hover */
+                    background-color: {styles_dict['checked_bg']};
+                }}
+                QCheckBox::indicator {{
+                    width: 15px;
+                    height: 15px;
+                }}
+                /* Optional: Style for the indicator itself if needed */
+                /* QCheckBox::indicator:checked {{ background-color: green; }} */
+                /* QCheckBox::indicator:unchecked {{ background-color: white; }} */
             """)
-            btn.clicked.connect(lambda checked, name=level_name: self.app_logic.toggle_log_level_filter(name, checked))
-            toolbar.addWidget(btn)
-            # Store button as instance attribute
-            setattr(self, f"{level_name.lower()}_btn", btn)
+            toolbar.addWidget(cb)
         
         toolbar.addSeparator()
 
@@ -275,13 +292,9 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
         search_layout.addWidget(QtWidgets.QLabel("🔍"))
         self.message_type_search_input = QtWidgets.QLineEdit()
         self.message_type_search_input.setPlaceholderText("Search message types...")
+        self.message_type_search_input.setClearButtonEnabled(True)
         self.message_type_search_input.textChanged.connect(self.app_logic.on_message_type_search_changed_debounced)
         search_layout.addWidget(self.message_type_search_input)
-        self.message_type_search_clear_btn = QtWidgets.QPushButton("✕")
-        self.message_type_search_clear_btn.setFixedSize(24,24)
-        self.message_type_search_clear_btn.setToolTip("Clear message type search")
-        self.message_type_search_clear_btn.clicked.connect(self.message_type_search_input.clear)
-        search_layout.addWidget(self.message_type_search_clear_btn)
         layout.addLayout(search_layout)
 
 
@@ -330,10 +343,18 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
         self.selected_messages_list = VirtualTreeWidget()
         self.selected_messages_list.setHeaderLabels(['Time', 'Level', 'Logger', 'Message'])
         self.selected_messages_list.itemSelectionChanged.connect(self.on_message_selected)
+
+        # Configure column widths
+        header = self.selected_messages_list.header()
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)  # Time
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)  # Level
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeToContents)  # Logger
+        header.setSectionResizeMode(3, QtWidgets.QHeaderView.Stretch)             # Message
+
+        layout.addWidget(self.selected_messages_list)
         self.selected_messages_list.current_sort_column = 0;
         self.selected_messages_list.current_sort_order = QtCore.Qt.AscendingOrder
         self.selected_messages_list.header().setSortIndicator(0, QtCore.Qt.AscendingOrder)
-        layout.addWidget(self.selected_messages_list)
 
         layout.addWidget(QtWidgets.QLabel("<b>Message Details</b>"))
         self.details_text = QtWidgets.QTextEdit();
@@ -466,59 +487,52 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
     def load_log_file(self):
         file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Open Log File", "", "Log Files (*.log *.log.gz);;All Files (*)")
-        if not file_path: return
-        self._initiate_loading_process(file_path=file_path)
+        if file_path:
+            self.app_logic.reset_for_new_data()
+            self._initiate_loading_process(file_path=file_path)
 
     def load_log_archive(self):
         archive_path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Open Log Archive", "", "ZIP Archives (*.zip);;All Files (*)")
-        if not archive_path:
-            return
-
-        try:
-            with zipfile.ZipFile(archive_path, 'r') as zf:
-                file_list = zf.namelist()
-        except zipfile.BadZipFile:
-            QtWidgets.QMessageBox.critical(self, "Error", "Failed to open the archive. It may be corrupt or not a valid ZIP file.")
-            return
-
-        dialog = DateSelectionDialog(file_list, self)
-        if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            files_to_process = dialog.get_selected_files()
-            if not files_to_process:
-                QtWidgets.QMessageBox.information(self, "No Files Selected", "No log files were found for the selected date range.")
+        if archive_path:
+            self.app_logic.reset_for_new_data()
+            try:
+                with zipfile.ZipFile(archive_path, 'r') as zf:
+                    file_list = zf.namelist()
+            except zipfile.BadZipFile:
+                QtWidgets.QMessageBox.critical(self, "Error", "Failed to open the archive. It may be corrupt or not a valid ZIP file.")
                 return
-            self._initiate_loading_process(archive_path=archive_path, files_to_process=files_to_process)
+
+            dialog = DateSelectionDialog(file_list, self)
+            if dialog.exec_() == QtWidgets.QDialog.Accepted:
+                files_to_process = dialog.get_selected_files()
+                if files_to_process:
+                    self._initiate_loading_process(archive_path=archive_path, files_to_process=files_to_process)
+                else:
+                    QtWidgets.QMessageBox.information(self, "No Files Selected", "No log files were found for the selected date range.")
 
     def on_log_data_loaded(self, log_entries_df, failed_files_summary):
         if self.centralWidget() == self.welcome_widget and not log_entries_df.empty:
             self.show_main_ui()
+        
         if self.loading_dialog:
             self.loading_dialog.update_status("Finalizing...", "Displaying results.")
             self.loading_dialog.accept()
+
         self.log_entries_full = log_entries_df
-        self.current_loaded_source_name = self.loader_thread.get_source_name() if self.loader_thread else "Unknown Source" # Make sure this is set before using in title
+        self.current_loaded_source_name = self.loader_thread.get_source_name() if self.loader_thread else "Unknown Source"
         self.setWindowTitle(f"iObeya Timeline Log Analyzer - {self.current_loaded_source_name}")
 
         # Build FTS index using AppLogic
         if self.app_logic:
-            if not self.log_entries_full.empty:
-                self.app_logic._build_fts_index(self.log_entries_full)
-            else:
-                # If logs are empty, ensure any previous FTS index is cleared/reset
-                self.app_logic._build_fts_index(pd.DataFrame())
-
-        if hasattr(self.selected_messages_list, 'set_all_items_data'):
-            self.selected_messages_list.set_all_items_data([])
-        self.details_text.clear()
+            self.app_logic._build_fts_index(self.log_entries_full)
 
         if self.stats_dialog and self.stats_dialog.isVisible():
-            self.stats_dialog.close();
+            self.stats_dialog.close()
             self.stats_dialog = None
 
         self.timeline_canvas.set_full_log_data(self.log_entries_full)
-        self.app_logic.reset_all_filters_and_view(initial_load=True) # Call on app_logic
-        self.loading_dialog.accept() # Close the loading dialog
+        self.app_logic.reset_all_filters_and_view(initial_load=True)
 
         if not self.log_entries_full.empty and not self._is_batch_updating_ui:
              self._trigger_timeline_update_from_selection()
@@ -787,7 +801,7 @@ class LogAnalyzerApp(QtWidgets.QMainWindow):
 def main():
     app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName("iObeya Timeline Log Analyzer")
-    app.setApplicationVersion("4.1.0") # Version bump
+    app.setApplicationVersion("4.2.0") # Version bump
     app.setOrganizationName("LogAnalyzer")
     try:
         app.setStyle(QtWidgets.QStyleFactory.create('Fusion'))

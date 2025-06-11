@@ -367,11 +367,19 @@ class TimelineCanvas(FigureCanvas):
                     pass  # Catch if already removed
 
             try:
-                ts = hovered_bar_info['time_start'].strftime('%H:%M:%S')
-                # For display, end time is exclusive, so show up to previous second/microsecond
-                te_display_obj = hovered_bar_info['time_end'] - timedelta(microseconds=1)
-                te = te_display_obj.strftime('%H:%M:%S')
-                text = f"{hovered_bar_info['message_type']}\nTime: {ts} - {te}\nCount: {hovered_bar_info['count']}"
+                time_start = hovered_bar_info['time_start']
+                time_end_display = hovered_bar_info['time_end'] - timedelta(microseconds=1)
+
+                # Format based on whether the time range spans across midnight
+                if time_start.date() == time_end_display.date():
+                    start_format = '%A, %Y-%m-%d %H:%M:%S'
+                    end_format = '%H:%M:%S'
+                    time_text = f"Time: {time_start.strftime(start_format)} - {time_end_display.strftime(end_format)}"
+                else:
+                    full_format = '%A, %Y-%m-%d %H:%M:%S'
+                    time_text = f"Start: {time_start.strftime(full_format)}\nEnd:   {time_end_display.strftime(full_format)}"
+
+                text = f"{hovered_bar_info['message_type']}\n{time_text}\nCount: {hovered_bar_info['count']}"
 
                 bar_patch = hovered_bar_info['bar']
                 x = bar_patch.get_x() + bar_patch.get_width() / 2

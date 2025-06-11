@@ -216,22 +216,10 @@ class SearchWidget(QtWidgets.QWidget):
         self.search_input.textChanged.connect(self._on_text_changed_debounced)
         layout.addWidget(self.search_input)
 
-        self.clear_button = QtWidgets.QPushButton("✕");
-        self.clear_button.setFixedSize(24, 24)  # Small, square button
-        self.clear_button.setToolTip("Clear search");
-        self.clear_button.clicked.connect(self.clear_search)
-        layout.addWidget(self.clear_button)
-
         # Timer for debouncing search input
         self.search_timer = QtCore.QTimer();
         self.search_timer.setSingleShot(True)
         self.search_timer.timeout.connect(self._emit_search_changed)
-
-        self.clear_button = QtWidgets.QPushButton("✕");
-        self.clear_button.setFixedSize(24, 24)  # Small, square button
-        self.clear_button.setToolTip("Clear search");
-        self.clear_button.clicked.connect(self.clear_search)
-        layout.addWidget(self.clear_button)
 
 
     def _on_text_changed_debounced(self, text): self.search_timer.stop(); self.search_timer.start(300)  # 300ms debounce

@@ -72,8 +72,13 @@ The iObeya Timeline Log Analyzer is a Python-based desktop application designed 
     *   All active filters (Log Level, Message Type, Time Range, Text Search) are combined to refine the displayed log entries.
     *   Click the "Reset View" button in the toolbar to clear all filters and reset the timeline zoom.
 
-4.  **Viewing Information**:
-    *   Click the **📊** button to open the statistics dialog.
+4.  **Viewing Statistics and Information**:
+    *   Click the **📊** button to open the statistics dialog, which provides multiple tabs for analysis:
+        *   **Overall Summary**: Displays key metrics like the time period covered, total log entries, and a breakdown by log level.
+            ![Global Statistics](images/global_statistics.jpg)
+        *   **Message Type Pareto**: A Pareto chart showing the most frequent message types, helping to identify the most common events.
+        *   **Distribution Chart**: A pie chart visualizing the distribution of logs, switchable between "By Log Level" and "By Message Type".
+            ![Message Type Distribution](images/message_type_distribution.jpg)
     *   Click the **ℹ️** button on the far right of the toolbar to open the "About" dialog.
 
 ## Known Issues / Future Enhancements
@@ -83,7 +88,12 @@ The iObeya Timeline Log Analyzer is a Python-based desktop application designed 
 
 ## Version History
 
-*   **v4.1.0** (Current)
+*   **v4.2.0** (Current)
+    *   **Docs**: Added a comprehensive `TECHNICAL_BRIEF.md` detailing the project's architecture, features, and technical decisions.
+    *   **Docs**: Updated `README.md` with new screenshots and descriptions for the statistics panel.
+    *   **Fix**: Resolved critical syntax errors in `iobeya_log_analyzer.py` and `statistics_dialog.py` that were causing application instability.
+
+*   **v4.1.0**
     *   **Feature**: Integrated high-performance full-text search using SQLite FTS5.
     *   **Feature**: Restored and enhanced the main toolbar with checkable log level filters and a search widget.
     *   **Feature**: Implemented coherent filtering, where search and log level filters dynamically update the Message Types list.
