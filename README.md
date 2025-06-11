@@ -8,7 +8,6 @@ The iObeya Timeline Log Analyzer is a Python-based desktop application designed 
 
 ## Key Features
 
-*   **Welcome Screen**: A user-friendly startup panel with quick access to load a single file or a log archive.
 *   **Flexible Log Loading**:
     *   Load individual log files (`.log`, `.log.gz`).
     *   Load compressed log archives (`.zip`) containing both plain text and gzipped logs.
