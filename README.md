@@ -4,6 +4,8 @@
 
 The iObeya Timeline Log Analyzer is a Python-based desktop application designed for viewing and analyzing application log files. It provides an interactive timeline visualization, powerful filtering capabilities, and memory-efficient handling of large log datasets, making it easier to navigate, understand, and troubleshoot log data.
 
+![Global View of the application](images/global_view.jpg)
+
 ## Key Features
 
 *   **Welcome Screen**: A user-friendly startup panel with quick access to load a single file or a log archive.
@@ -17,6 +19,7 @@ The iObeya Timeline Log Analyzer is a Python-based desktop application designed 
     *   View log event distribution over time.
     *   Adjustable granularity (Day, Hour, Minute) for the timeline display.
     *   Zoom and pan capabilities on the timeline.
+    *   When more than 10 message types are selected, their individual bars in the timeline are aggregated into a single "Other Types" bar to maintain clarity.
 *   **Powerful Filtering**: Combine multiple filters for precise analysis:
     *   Filter by **Log Level** (INFO, WARN, ERROR, DEBUG).
     *   Filter by **Message Type** (derived from logger names).
@@ -50,7 +53,8 @@ The iObeya Timeline Log Analyzer is a Python-based desktop application designed 
 
 1.  **Loading Logs**: From the welcome screen or the main toolbar, choose one of the following:
     *   **Load Single Log File**: Select and load a single `.log` or `.log.gz` file.
-    *   **Load Log Archive**: Select a `.zip` archive. A dialog will appear:
+    *   **Load Log Archive**: Select a `.zip` archive. A dialog will appear, allowing you to filter files by date and type before loading:
+        ![File Selection Dialog](images/file_selection_dialog.jpg)
         *   Use the **Filter by type** dropdown to narrow down files (e.g., show only `app*` logs).
         *   Select a **Start Date** and **End Date** using the calendar widgets.
         *   The file list updates automatically. Click "OK" to load the selected files.
