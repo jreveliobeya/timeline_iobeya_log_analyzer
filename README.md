@@ -27,24 +27,24 @@ The iObeya Timeline Log Analyzer is a Python-based desktop application designed 
 *   **Memory Efficient**: Utilizes pandas DataFrames and on-demand loading of full log entries to handle very large files.
 *   **About Dialog**: Includes application version, copyright information, and a fun hidden easter egg.
 
-## Requirements
+## Installation and Running
 
-*   Python 3.x
-*   PyQt5
-*   Pandas
+1.  **Clone the Repository**
+    ```bash
+    git clone git@github.com:jreveliobeya/timeline_iobeya_log_analyzer.git
+    cd timeline_iobeya_log_analyzer
+    ```
 
-To install the necessary Python libraries, you can use pip:
-```bash
-pip install PyQt5 pandas
-```
+2.  **Install Dependencies**
+    The project requires `PyQt5` and `pandas`. Install them using pip:
+    ```bash
+    pip install PyQt5 pandas
+    ```
 
-## How to Run
-
-Navigate to the project directory in your terminal and run the main application file:
-
-```bash
-python iobeya_log_analyzer.py
-```
+3.  **Run the Application**
+    ```bash
+    python iobeya_log_analyzer.py
+    ```
 
 ## Using the Analyzer
 
